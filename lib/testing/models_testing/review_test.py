@@ -1,122 +1,54 @@
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
+from lib.models import Base, Game, User, Review
 from conftest import SQLITE_URL
-from models import User, Game, Review
 
-class TestReview:
-    '''Review in models.py'''
+@pytest.fixture(scope='module')
+def db_session():
+    """Fixture to provide a database session."""
+    engine = create_engine(SQLITE_URL)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    yield session
+    session.close()
+    Base.metadata.drop_all(engine)
 
-    def test_has_attributes(self):
-        '''has attributes id, score, comment, game_id, and user_id.'''
-        
-        engine = create_engine(SQLITE_URL)
-        Session = sessionmaker(bind=engine)
-        session = Session()
+def test_review_has_attributes(db_session):
+    """Test attributes of the Review model."""
+    review = Review(score=2, comment="Very bad!")
+    db_session.add(review)
+    db_session.commit()
+    
+    # Fetch the review from the database to assert its attributes
+    fetched_review = db_session.query(Review).filter_by(id=review.id).one()
+    
+    assert fetched_review.id == review.id
+    assert fetched_review.score == review.score
+    assert fetched_review.comment == review.comment
+    assert fetched_review.created_at is not None
+    assert fetched_review.updated_at is not None
 
-        review = Review(score=2, comment="Very bad!")
-        session.add(review)
-        session.commit()
-
-        assert hasattr(review, "id")
-        assert hasattr(review, "score")
-        assert hasattr(review, "comment")
-        assert hasattr(review, "game_id")
-        assert hasattr(review, "user_id")
-
-        session.query(Review).delete()
-        session.commit()
-
-    def test_has_one_user_id(self):
-        '''has an attribute "user_id", an int that is a foreign key to the users table.'''
-
-        engine = create_engine(SQLITE_URL)
-        Session = sessionmaker(bind=engine)
-        session = Session()
-
-        user = User(name="Ben")
-        session.add(user)
-        session.commit()
-
-        review = Review(score=4, comment="Fairly bad!")
-        review.user_id = user.id
-        session.add(review)
-        session.commit()
-
-        assert type(review.user_id) == int
-        assert review.user_id == user.id
-
-        session.query(User).delete()
-        session.query(Review).delete()
-        session.commit()
-
-    def test_has_one_user(self):
-        '''has an attribute "user" in the ORM that is a record from the users table.'''
-
-        engine = create_engine(SQLITE_URL)
-        Session = sessionmaker(bind=engine)
-        session = Session()
-
-        user = User(name="Ben")
-        session.add(user)
-        session.commit()
-
-        review = Review(score=4, comment="Fairly bad!")
-        review.user = user
-        session.add(review)
-        session.commit()
-
-        assert review.user
-        assert review.user_id == user.id
-        assert review.user == user
-
-        session.query(User).delete()
-        session.query(Review).delete()
-        session.commit()
-
-    def test_has_one_game_id(self):
-        '''has an attribute "game_id", an int that is a foreign key to the games table.'''
-
-        engine = create_engine(SQLITE_URL)
-        Session = sessionmaker(bind=engine)
-        session = Session()
-
-        game = Game(title="Javelinna")
-        session.add(game)
-        session.commit()
-
-        review = Review(score=9, comment="Iconic.")
-        review.game_id = game.id
-        session.add(review)
-        session.commit()
-
-        assert type(review.game_id) == int
-        assert review.game_id == game.id
-
-        session.query(Game).delete()
-        session.query(Review).delete()
-        session.commit()
-
-    def test_has_one_game(self):
-        '''has an attribute "game" in the ORM that is a record from the games table.'''
-
-        engine = create_engine(SQLITE_URL)
-        Session = sessionmaker(bind=engine)
-        session = Session()
-
-        game = Game(title="Shady Spirits")
-        session.add(game)
-        session.commit()
-
-        review = Review(score=10, comment="GGOAT")
-        review.game = game
-        session.add(review)
-        session.commit()
-
-        assert review.game
-        assert review.game_id == game.id
-        assert review.game == game
-
-        session.query(Game).delete()
-        session.query(Review).delete()
-        session.commit()
+def test_review_relationships(db_session):
+    """Test relationships of the Review model with Game and User."""
+    # Create and add instances of Game and User
+    game = Game(title="Game Title", genre="Genre", platform="Platform", price=50)
+    user = User(name="User Name")
+    
+    db_session.add(game)
+    db_session.add(user)
+    db_session.commit()
+    
+    # Create a review related to the game and user
+    review = Review(score=4, comment="Great game!", game_id=game.id, user_id=user.id)
+    db_session.add(review)
+    db_session.commit()
+    
+    # Fetch the review and check relationships
+    fetched_review = db_session.query(Review).filter_by(id=review.id).one()
+    
+    assert fetched_review.game_id == game.id
+    assert fetched_review.user_id == user.id
+    assert fetched_review.game == game
+    assert fetched_review.user == user
